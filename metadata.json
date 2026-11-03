@@ -1,0 +1,6 @@
+{
+  "name": "Guardian (گاردین)",
+  "description": "سامانه هوشمند و ضد سرقت گاردین برای محافظت آفلاین و از راه دور از گوشی هوشمند شما.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
