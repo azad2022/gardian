@@ -115,6 +115,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _smsSentCount = MutableStateFlow(prefs.smsSentCount)
     val smsSentCount: StateFlow<Int> = _smsSentCount.asStateFlow()
 
+    private val _daysProtected = MutableStateFlow(prefs.daysProtected)
+    val daysProtected: StateFlow<Int> = _daysProtected.asStateFlow()
+
     private val _lastLocationTimeStr = MutableStateFlow(
         if (prefs.lastLocationTime == 0L) "تاکنون ثبت نشده" 
         else JalaliCalendarHelper.getJalaliDateString(prefs.lastLocationTime)
@@ -130,12 +133,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var activePlaybackSlot = MutableStateFlow<Int?>(null)
 
     init {
+        if (prefs.firstInstallTime == 0L) {
+            prefs.firstInstallTime = System.currentTimeMillis()
+        }
+        _daysProtected.value = prefs.daysProtected
         // Log first installation stats if newly completed
         viewModelScope.launch {
             _lastEventMessage.value = GuardianService.lastEventLive
-            // Increment protect days occasionally
-            val days = prefs.daysProtected
-            prefs.daysProtected = days
         }
     }
 
@@ -181,6 +185,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun completeOnboardingAndActivate() {
+        if (prefs.firstInstallTime == 0L) {
+            prefs.firstInstallTime = System.currentTimeMillis()
+        }
+        _daysProtected.value = prefs.daysProtected
         prefs.isOnboarded = true
         prefs.isArmed = true
         _isOnboarded.value = true

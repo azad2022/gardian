@@ -6,14 +6,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
-import androidx.compose.foundation.BorderStroke
-import com.example.utils.JalaliCalendarHelper
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,28 +36,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,7 +69,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -75,22 +76,26 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.receiver.GuardianDeviceAdminReceiver
 import com.example.ui.theme.GuardianAccent
-import com.example.ui.theme.GuardianPrimary
 import com.example.ui.theme.GuardianSecondary
 import com.example.ui.viewmodel.MainViewModel
+import com.example.utils.JalaliCalendarHelper
 
 @Composable
 fun OnboardingWizard(viewModel: MainViewModel) {
     val currentStep by viewModel.onboardingStep.collectAsState()
-    val context = LocalContext.current
 
-    // Force RTL Layout to support Farsi natively
+    // Force RTL Layout to support Persian natively
     CompositionLocalProvider(value = LocalLayoutDirection provides LayoutDirection.Rtl) {
         Box(
             modifier = Modifier
@@ -106,7 +111,7 @@ fun OnboardingWizard(viewModel: MainViewModel) {
                 // Wizard Header
                 OnboardingHeader(currentStep = currentStep)
 
-                // Step Content
+                // Step Content (7 distinct steps)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -118,13 +123,14 @@ fun OnboardingWizard(viewModel: MainViewModel) {
                         1 -> WelcomeStepView(viewModel)
                         2 -> EmergencyContactStepView(viewModel)
                         3 -> SecretSmsCodeStepView(viewModel)
-                        4 -> PermissionsStepView(viewModel)
+                        4 -> DecoyPinStepView(viewModel)
                         5 -> DeviceAdminStepView(viewModel)
-                        6 -> ReadyStepView(viewModel)
+                        6 -> PermissionsStepView(viewModel)
+                        7 -> ReadyStepView(viewModel)
                     }
                 }
 
-                // Footer (Dynamic Navigation dots)
+                // Footer (Dynamic Navigation dots for 7 steps)
                 OnboardingFooter(currentStep = currentStep)
             }
         }
@@ -146,17 +152,17 @@ fun OnboardingHeader(currentStep: Int) {
             modifier = Modifier.testTag("onboarding_header_title")
         )
         Spacer(modifier = Modifier.height(12.dp))
-        
-        // Horizontal step indicators
+
+        // Horizontal step indicators (7 steps)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            for (i in 1..6) {
+            for (i in 1..7) {
                 val isActive = i == currentStep
                 val isCompleted = i < currentStep
-                
+
                 Box(
                     modifier = Modifier
                         .height(6.dp)
@@ -170,7 +176,7 @@ fun OnboardingHeader(currentStep: Int) {
                             }
                         )
                 )
-                if (i < 6) {
+                if (i < 7) {
                     Spacer(modifier = Modifier.width(6.dp))
                 }
             }
@@ -181,7 +187,7 @@ fun OnboardingHeader(currentStep: Int) {
 @Composable
 fun OnboardingFooter(currentStep: Int) {
     Text(
-        text = "گام $currentStep از ۶",
+        text = "گام $currentStep از ۷",
         color = Color.Gray,
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
@@ -190,12 +196,12 @@ fun OnboardingFooter(currentStep: Int) {
     )
 }
 
-// STEP 1: WELCOME
+// STEP 1: WELCOME & PRIVACY POLICY
 @Composable
 fun WelcomeStepView(viewModel: MainViewModel) {
     val scroll = rememberScrollState()
     var isPrivacyAccepted by remember { mutableStateOf(false) }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -207,11 +213,11 @@ fun WelcomeStepView(viewModel: MainViewModel) {
             imageVector = Icons.Filled.Lock,
             contentDescription = null,
             tint = GuardianAccent,
-            modifier = Modifier.size(80.dp)
+            modifier = Modifier.size(72.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "به گاردین خوش آمدید (گاردین شما)",
+            text = "به گاردین خوش آمدید",
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
@@ -219,15 +225,15 @@ fun WelcomeStepView(viewModel: MainViewModel) {
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "سامانه مدرن و کاملاً آفلاین ضدسرقت گوشی هوشمند. این برنامه بدون نیاز به اینترنت، گزارشات موقعیت یاب و قفل‌های امنیتی را از طریق پیامک برای شما ارسال می‌کند.",
+            text = "سامانه مدرن، هوشمند و کاملاً آفلاین ضدسرقت گوشی هوشمند. این برنامه بدون نیاز به اینترنت، گزارشات موقعیت‌یاب و قفل‌های امنیتی را از طریق پیامک برای شما ارسال می‌کند.",
             color = Color.LightGray,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
             lineHeight = 24.sp
         )
-        
+
         Spacer(modifier = Modifier.height(20.dp))
-        
+
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
             shape = RoundedCornerShape(16.dp),
@@ -239,10 +245,10 @@ fun WelcomeStepView(viewModel: MainViewModel) {
                 BulletFeatureItem("قفل امنیتی و آژیر ضد سکوت", "گوشی با حداکثر توان آژیر کشیده و فلاش دوربین چشمک‌زن می‌شود")
             }
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // PRIVACY POLICY SECTION (Cafe Bazaar Requirement)
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // PRIVACY POLICY SECTION
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f)),
             shape = RoundedCornerShape(16.dp),
@@ -259,19 +265,19 @@ fun WelcomeStepView(viewModel: MainViewModel) {
                 )
                 Text(
                     text = "برنامه ضدسرقت گاردین متعهد به حفظ کامل حریم خصوصی و صیانت از داده‌های شماست. این برنامه کاملا آفلاین بوده و جهت کاربری امنیتی خود داده‌های زیر را به صورت کاملاً لوکال دریافت و پردازش می‌کند:\n" +
-                           "۱. شماره همراه اضطراری: صرفاً جهت ارسال پیامک آلارم و هشدار سرقت به مالک ثانویه انتخابی شما.\n" +
-                           "۲. موقعیت مکانی دقیق و تقریبی: جهت مکان‌یابی تلفن هدر رفته یا مسروقه و ارسال مستقیم پیامک لوکیشن.\n" +
-                           "۳. دسترسی دوربین جلو: جهت گرفتن سلفی محرمانه از چهره فرد خرابکار در صورت تلاش ناموفق برای باز کردن پین قفل.\n" +
-                           "۴. خواندن و بررسی پیامک‌های ورودی: جهت دریافت دستورات کنترل از راه دور پیامکی ارسال شده از جانب شماره مالک ثانویه.\n\n" +
-                           "تعهد ما: هیچ داده‌ای به هیچ سرور خارجی، شخص ثالث، توسعه‌دهنده یا سازمان خارجی ارسال نخواهد شد و کلیه کارهای پردازش و نگهداری اطلاعات در امنیت مطلق روی حافظه داخلی تلفن همراه شما نگهداری می‌شود.",
+                            "۱. شماره همراه اضطراری: صرفاً جهت ارسال پیامک آلارم و هشدار سرقت به مالک ثانویه انتخابی شما.\n" +
+                            "۲. موقعیت مکانی دقیق و تقریبی: جهت مکان‌یابی تلفن هدر رفته یا مسروقه و ارسال مستقیم پیامک لوکیشن.\n" +
+                            "۳. دسترسی دوربین جلو: جهت گرفتن سلفی محرمانه از چهره فرد خرابکار در صورت تلاش ناموفق برای باز کردن پین قفل.\n" +
+                            "۴. خواندن و بررسی پیامک‌های ورودی: جهت دریافت دستورات کنترل از راه دور پیامکی ارسال شده از جانب شماره مالک ثانویه.\n\n" +
+                            "تعهد ما: هیچ داده‌ای به هیچ سرور خارجی، شخص ثالث، توسعه‌دهنده یا سازمان خارجی ارسال نخواهد شد و کلیه کارهای پردازش و نگهداری اطلاعات در امنیت مطلق روی حافظه داخلی تلفن همراه شما نگهداری می‌شود.",
                     color = Color.LightGray.copy(alpha = 0.9f),
                     fontSize = 12.sp,
                     lineHeight = 22.sp,
                     textAlign = TextAlign.Right
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -300,9 +306,9 @@ fun WelcomeStepView(viewModel: MainViewModel) {
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Button(
             onClick = { viewModel.setOnboardingStep(2) },
             enabled = isPrivacyAccepted,
@@ -463,7 +469,7 @@ fun SecretSmsCodeStepView(viewModel: MainViewModel) {
         )
 
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
             modifier = Modifier.fillMaxWidth()
@@ -557,7 +563,7 @@ fun SecretSmsCodeStepView(viewModel: MainViewModel) {
                 onClick = {
                     if (code.length == 4 && code == confirmCode) {
                         viewModel.submitSecretSmsCodeOnSetup(code)
-                        viewModel.setOnboardingStep(4)
+                        viewModel.setOnboardingStep(4) // Proceed to Decoy PIN step!
                     } else if (code != confirmCode) {
                         errorMsg = "رمز‌های وارد شده یکسان نیستند ❌"
                     } else {
@@ -577,10 +583,11 @@ fun SecretSmsCodeStepView(viewModel: MainViewModel) {
     }
 }
 
-// STEP 4: DECOY PIN
+// STEP 4: DECOY PIN (PIN جعلی / فریب‌دهنده سارق)
 @Composable
 fun DecoyPinStepView(viewModel: MainViewModel) {
     var decoy by remember { mutableStateOf("") }
+    var confirmDecoy by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf("") }
     val secretCode by viewModel.secretSmsCode.collectAsState()
 
@@ -604,24 +611,24 @@ fun DecoyPinStepView(viewModel: MainViewModel) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "یک رمز دوم (مثلاً ۵۶۷۸) متفاوت از رمز اول تعیین کنید. سارق اگر این رمز را وارد کند، گوشی ظاهراً باز می‌شود ولی در پس‌زمینه موقعیت GPS سریعاً به شما مخفیانه ارسال می‌شود و اطلاعات اساسی قفل می‌مانند.",
+            text = "یک رمز دوم ۴ رقمی (متفاوت از کد پیامکی) تعیین کنید. اگر سارق شما را مجبور به باز کردن گوشی کرد، با وارد کردن این رمز گوشی ظاهراً باز می‌شود، اما در پس‌زمینه بدون ایجاد کوچک‌ترین سر و صدا، موقعیت GPS و هشدار خطر به شماره اضطراری مخابره می‌گردد.",
             color = Color.LightGray,
-            fontSize = 14.sp,
+            fontSize = 13.5.sp,
             textAlign = TextAlign.Center,
             lineHeight = 22.sp
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         OutlinedTextField(
             value = decoy,
             onValueChange = {
-                if (it.all { c -> c.isDigit() }) {
+                if (it.length <= 4 && it.all { c -> c.isDigit() }) {
                     decoy = it
                     errorMsg = ""
                 }
             },
-            label = { Text("مثال: رمز دوم فریبنده", color = Color.Gray) },
+            label = { Text("رمز ۴ رقمی جعلی (فریبنده)", color = Color.Gray) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             colors = OutlinedTextFieldDefaults.colors(
@@ -635,6 +642,32 @@ fun DecoyPinStepView(viewModel: MainViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("decoy_pin_input_onboarding")
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = confirmDecoy,
+            onValueChange = {
+                if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                    confirmDecoy = it
+                    errorMsg = ""
+                }
+            },
+            label = { Text("تکرار رمز ۴ رقمی جعلی", color = Color.Gray) },
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = GuardianAccent,
+                unfocusedBorderColor = Color.DarkGray,
+                focusedLabelColor = GuardianAccent
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("decoy_pin_confirm_onboarding")
         )
 
         if (errorMsg.isNotEmpty()) {
@@ -663,13 +696,15 @@ fun DecoyPinStepView(viewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(12.dp))
             Button(
                 onClick = {
-                    if (decoy.isEmpty()) {
-                        errorMsg = "لطفا یک PIN جعلی وارد کنید ❌"
+                    if (decoy.length != 4) {
+                        errorMsg = "PIN جعلی باید ۴ رقمی باشد ❌"
+                    } else if (decoy != confirmDecoy) {
+                        errorMsg = "تکرار رمز با رمز وارد شده مطابقت ندارد ❌"
                     } else if (decoy == secretCode) {
-                        errorMsg = "PIN جعلی باید با رمز پیامکی کنترل تفاوت داشته باشد! ❌"
+                        errorMsg = "PIN جعلی باید با کد کنترل پیامکی تفاوت داشته باشد! ❌"
                     } else {
                         viewModel.submitDecoyPinOnSetup(decoy)
-                        viewModel.setOnboardingStep(5)
+                        viewModel.setOnboardingStep(5) // Proceed to Device Admin
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = GuardianAccent, contentColor = Color.Black),
@@ -685,10 +720,233 @@ fun DecoyPinStepView(viewModel: MainViewModel) {
     }
 }
 
-// STEP 5: PERMISSIONS REQUESTER
+// STEP 5: DEVICE ADMINISTRATOR (با سه وضعیت دقیق و بررسی هنگام بازگشت از تنظیمات)
+@Composable
+fun DeviceAdminStepView(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val adminReceiver = remember { ComponentName(context, GuardianDeviceAdminReceiver::class.java) }
+    val dpm = remember { context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager }
+
+    var isAdminActive by remember { mutableStateOf(dpm.isAdminActive(adminReceiver)) }
+    var hasAttemptedLaunch by remember { mutableStateOf(false) }
+    var showIncompleteDialog by remember { mutableStateOf(false) }
+
+    // Real-time resume listener to accurately detect if user actually accepted Device Admin in Android settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isAdminActive = dpm.isAdminActive(adminReceiver)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val launchAdminSetup = {
+        hasAttemptedLaunch = true
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminReceiver)
+            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "سامانه گاردین برای جلوگیری از لغو نصب برنامه توسط سارق به مجوز مدیر دستگاه نیاز دارد.")
+        }
+        context.startActivity(intent)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Lock,
+            contentDescription = null,
+            tint = GuardianAccent,
+            modifier = Modifier.size(72.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "فعالسازی مدیریت دستگاه (Device Admin)",
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "جهت جلوگیری از حذف غیرمجاز اپلیکیشن توسط سارقین در تنظیمات اندروید و بازار، مجوز مدیریت دستگاه الزامی است.",
+            color = Color.LightGray,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Three distinct status states:
+        when {
+            isAdminActive -> {
+                // State 1: Verified Active
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF2E7D32).copy(alpha = 0.2f))
+                        .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(28.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(text = "مدیر دستگاه فعال و تأیید شد 🛡️", color = Color(0xFF81C784), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(text = "سیستم ضدحذف با موفقیت فعال شد. برنامه در برابر حذف محافظت می‌شود.", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                    }
+                }
+            }
+            hasAttemptedLaunch -> {
+                // State 2: Returned without activation (Denied / Incomplete)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFC62828).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFFEF5350).copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(text = "وضعیت: مدیر دستگاه فعال نشد ⚠️", color = Color(0xFFEF5350), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "پنجره تنظیمات بسته شد اما مجوز اعطا نگردید. برای فعال‌سازی کامل حفاظت ضدحذف، لطفاً مجدداً دکمه زیر را لمس کرده و در پنجره سیستم گزینه فعال‌سازی را انتخاب فرمایید.",
+                        color = Color.LightGray,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { launchAdminSetup() },
+                        colors = ButtonDefaults.buttonColors(containerColor = GuardianAccent, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Text("تلاش مجدد برای فعال‌سازی مدیر دستگاه", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+            else -> {
+                // State 3: Waiting for initial launch
+                Button(
+                    onClick = { launchAdminSetup() },
+                    colors = ButtonDefaults.buttonColors(containerColor = GuardianAccent, contentColor = Color.Black),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .testTag("activate_device_admin_button")
+                ) {
+                    Text("فعال‌سازی سرور مدیریت گاردین", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = { viewModel.setOnboardingStep(4) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray, contentColor = Color.White),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Text("قبلی")
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Button(
+                onClick = {
+                    if (isAdminActive) {
+                        viewModel.setOnboardingStep(6) // Proceed to Permissions
+                    } else {
+                        showIncompleteDialog = true
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isAdminActive) GuardianAccent else Color.DarkGray,
+                    contentColor = if (isAdminActive) Color.Black else Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(48.dp)
+                    .testTag("next_device_admin_button")
+            ) {
+                Text(
+                    text = if (isAdminActive) "تأیید و ادامه" else "ادامه بدون مدیر دستگاه",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+
+    if (showIncompleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showIncompleteDialog = false },
+            title = {
+                Text(
+                    text = "هشدار عدم فعال‌سازی مدیر دستگاه",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "بدون فعال‌سازی مجوز مدیریت دستگاه، سارق می‌تواند با باز کردن بخش تنظیمات گوشی یا بازار، برنامه گاردین را به آسانی لغو نصب کند. آیا مایلید بدون حفاظت ضدحذف ادامه دهید؟",
+                    color = Color(0xFFCBD5E1),
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showIncompleteDialog = false
+                        viewModel.setOnboardingStep(6)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350), contentColor = Color.White)
+                ) {
+                    Text("ادامه با ریسک حذف", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showIncompleteDialog = false
+                    launchAdminSetup()
+                }) {
+                    Text("بازگشت و فعال‌سازی", color = GuardianAccent, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color(0xFF1E1E1E),
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+}
+
+// STEP 6: PERMISSIONS REQUESTER (اصلاح رفتار دکمه ادامه برای جلوگیری از گمراهی)
 @Composable
 fun PermissionsStepView(viewModel: MainViewModel) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     var permissionsState by remember {
         mutableStateOf(
             mapOf(
@@ -703,17 +961,35 @@ fun PermissionsStepView(viewModel: MainViewModel) {
 
     var hasOverlayPermission by remember {
         mutableStateOf(
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                android.provider.Settings.canDrawOverlays(context)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Settings.canDrawOverlays(context)
             } else {
                 true
             }
         )
     }
 
-    LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            hasOverlayPermission = android.provider.Settings.canDrawOverlays(context)
+    var showIncompletePermsDialog by remember { mutableStateOf(false) }
+
+    // Re-check permissions and overlay on resume
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionsState = mapOf(
+                    Manifest.permission.SEND_SMS to isGranted(context, Manifest.permission.SEND_SMS),
+                    Manifest.permission.RECEIVE_SMS to isGranted(context, Manifest.permission.RECEIVE_SMS),
+                    Manifest.permission.READ_SMS to isGranted(context, Manifest.permission.READ_SMS),
+                    Manifest.permission.ACCESS_FINE_LOCATION to isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION),
+                    Manifest.permission.RECORD_AUDIO to isGranted(context, Manifest.permission.RECORD_AUDIO)
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    hasOverlayPermission = Settings.canDrawOverlays(context)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -723,7 +999,7 @@ fun PermissionsStepView(viewModel: MainViewModel) {
         permissionsState = results.mapValues { it.value }
     }
 
-    val allGranted = permissionsState.values.all { it }
+    val allGranted = permissionsState.values.all { it } && hasOverlayPermission
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -763,7 +1039,9 @@ fun PermissionsStepView(viewModel: MainViewModel) {
             PermissionExplanationRow(
                 title = "پیامک (SMS)",
                 description = "برای دریافت دستورات ردیابی راه دور و فرستادن اطلاعات موقعیت سارق",
-                isGranted = permissionsState[Manifest.permission.SEND_SMS] == true && permissionsState[Manifest.permission.RECEIVE_SMS] == true && permissionsState[Manifest.permission.READ_SMS] == true,
+                isGranted = permissionsState[Manifest.permission.SEND_SMS] == true &&
+                        permissionsState[Manifest.permission.RECEIVE_SMS] == true &&
+                        permissionsState[Manifest.permission.READ_SMS] == true,
                 icon = Icons.Filled.Email
             )
 
@@ -775,15 +1053,15 @@ fun PermissionsStepView(viewModel: MainViewModel) {
             )
 
             PermissionExplanationRow(
-                title = "ضبط صدا (MUTE ALARM slots)",
-                description = "جهت ضبط پیام صوتی آژیرگیر به دلخواه شاکی و مخفی نگاه داشتن آن در حافظه خصوصی",
+                title = "ضبط صدا (اسلات‌های هشدار صوتی)",
+                description = "جهت ضبط پیام صوتی آژیرگیر به دلخواه مالک و پخش با حداکثر توان",
                 isGranted = permissionsState[Manifest.permission.RECORD_AUDIO] == true,
                 icon = Icons.Filled.Call
             )
 
             PermissionExplanationRow(
                 title = "ترسیم بر روی سایر برنامه‌ها (Overlay)",
-                description = "جهت نمایش پیامک مسدودساز صفحه بر روی قفل گوشی از راه دور دوقلو",
+                description = "جهت نمایش پیامک مسدودساز صفحه بر روی قفل گوشی از راه دور",
                 isGranted = hasOverlayPermission,
                 icon = Icons.Filled.Settings
             )
@@ -791,9 +1069,10 @@ fun PermissionsStepView(viewModel: MainViewModel) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (!allGranted || !hasOverlayPermission) {
+        if (!allGranted) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                if (!allGranted) {
+                val hasCorePerms = permissionsState.values.all { it }
+                if (!hasCorePerms) {
                     Button(
                         onClick = {
                             launcher.launch(
@@ -821,17 +1100,17 @@ fun PermissionsStepView(viewModel: MainViewModel) {
                 if (!hasOverlayPermission) {
                     Button(
                         onClick = {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                                 try {
                                     val intent = Intent(
-                                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                         android.net.Uri.parse("package:${context.packageName}")
                                     ).apply {
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
                                     context.startActivity(intent)
                                 } catch (e: Exception) {
-                                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
                                     context.startActivity(intent)
@@ -857,7 +1136,7 @@ fun PermissionsStepView(viewModel: MainViewModel) {
                     .background(Color(0xFF2E7D32).copy(alpha = 0.2f))
                     .padding(12.dp)
             ) {
-                Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32))
+                Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "تمامی دسترسی‌های اصلی با موفقیت اعطا شد.", color = Color.White, fontSize = 13.sp)
             }
@@ -867,7 +1146,7 @@ fun PermissionsStepView(viewModel: MainViewModel) {
 
         Row(modifier = Modifier.fillMaxWidth()) {
             Button(
-                onClick = { viewModel.setOnboardingStep(3) },
+                onClick = { viewModel.setOnboardingStep(5) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray, contentColor = Color.White),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
@@ -880,25 +1159,68 @@ fun PermissionsStepView(viewModel: MainViewModel) {
             Button(
                 onClick = {
                     if (allGranted) {
-                        viewModel.setOnboardingStep(5)
+                        viewModel.setOnboardingStep(7) // Go to Ready
                     } else {
-                        // Allow step bypass while displaying warn
-                        viewModel.setOnboardingStep(5)
+                        showIncompletePermsDialog = true
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (allGranted) GuardianAccent else Color.DarkGray,
-                    contentColor = if (allGranted) Color.Black else Color.Gray
+                    containerColor = if (allGranted) GuardianAccent else Color.White.copy(alpha = 0.08f),
+                    contentColor = if (allGranted) Color.Black else Color.White
                 ),
+                border = if (allGranted) null else BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .weight(1.5f)
                     .height(48.dp)
                     .testTag("next_onboarding_perm_button")
             ) {
-                Text("تأیید و ادامه", fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (allGranted) "تأیید و ادامه" else "ادامه با مجوزهای ناقص ⚠️",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
+    }
+
+    if (showIncompletePermsDialog) {
+        AlertDialog(
+            onDismissRequest = { showIncompletePermsDialog = false },
+            title = {
+                Text(
+                    text = "ادامه با دسترسی‌های ناقص",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "برخی مجوزهای کلیدی (مانند پیامک، موقعیت مکانی جی‌پی‌اس یا ترسیم روی صفحه) هنوز فعال نشده‌اند. بدون این دسترسی‌ها، قابلیت ردیابی آفلاین و قفل فوری گوشی غیرفعال خواهد بود. آیا مایلید با محدودیت ادامه دهید؟",
+                    color = Color(0xFFCBD5E1),
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showIncompletePermsDialog = false
+                        viewModel.setOnboardingStep(7)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350), contentColor = Color.White)
+                ) {
+                    Text("ادامه به هر حال", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIncompletePermsDialog = false }) {
+                    Text("بازگشت و اعطای مجوزها", color = GuardianAccent, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color(0xFF1E1E1E),
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 }
 
@@ -925,7 +1247,7 @@ fun PermissionExplanationRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isGranted) Color(0xFF2E7D32) else Color.Gray,
+                tint = if (isGranted) Color(0xFF4CAF50) else Color.Gray,
                 modifier = Modifier.size(36.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -945,131 +1267,15 @@ fun PermissionExplanationRow(
     }
 }
 
-// STEP 6: DEVICE ADMINISTRATOR
-@Composable
-fun DeviceAdminStepView(viewModel: MainViewModel) {
-    val context = LocalContext.current
-    var isAdminEnabled by remember { mutableStateOf(false) }
-
-    val adminReceiver = remember { ComponentName(context, GuardianDeviceAdminReceiver::class.java) }
-    val dpm = remember { context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager }
-
-    // Use Lifecycle checks to monitor when user backs out of Device Admin activation
-    LaunchedEffect(Unit) {
-        isAdminEnabled = dpm.isAdminActive(adminReceiver)
-    }
-
-    val launchAdminSetup = {
-        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminReceiver)
-            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "سیستم گاردین برای پیشگیری از حذف برنامه توسط سارقان به مجوز مدیریت نیاز مبرم دارد.")
-        }
-        context.startActivity(intent)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = null,
-            tint = GuardianAccent,
-            modifier = Modifier.size(72.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "فعالسازی مدیریت دستگاه",
-            color = Color.White,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "جهت جلوگیری از حذف غیرمجاز اپلیکیشن توسط سارقین، لطفاً مجوز مدیریت دستگاه (Device Admin) را صادر کنید.",
-            color = Color.LightGray,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (!isAdminEnabled) {
-            Button(
-                onClick = { 
-                    launchAdminSetup()
-                    // Fake trigger validation to proceed easily in emulators
-                    isAdminEnabled = true 
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = GuardianAccent, contentColor = Color.Black),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("activate_device_admin_button")
-            ) {
-                Text("فعال‌سازی سرور مدیریت گاردین", fontWeight = FontWeight.Bold)
-            }
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF2E7D32).copy(alpha = 0.2f))
-                    .padding(16.dp)
-            ) {
-                Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "مدیر دستگاه فعال است و سیستم ضدحذف مجهز شد.", color = Color.White, fontSize = 13.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = { viewModel.setOnboardingStep(4) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray, contentColor = Color.White),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-            ) {
-                Text("قبلی")
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Button(
-                onClick = {
-                    val active = dpm.isAdminActive(adminReceiver)
-                    if (active || isAdminEnabled) {
-                        viewModel.setOnboardingStep(6)
-                    } else {
-                        // Force warning Toast
-                        launchAdminSetup()
-                        isAdminEnabled = true // Fallback
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = GuardianAccent, contentColor = Color.Black),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1.5f)
-                    .height(48.dp)
-                    .testTag("next_device_admin_button")
-            ) {
-                Text("تأیید و ادامه", fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-// STEP 7: READY
+// STEP 7: READY & CONFIG SUMMARY (با محافظت از نمایش رمز پیامکی و پین جعلی)
 @Composable
 fun ReadyStepView(viewModel: MainViewModel) {
     val emergencyNumber by viewModel.emergencyNumber.collectAsState()
     val secretCode by viewModel.secretSmsCode.collectAsState()
+    val decoyPin by viewModel.decoyPin.collectAsState()
+
+    var isSecretCodeVisible by remember { mutableStateOf(false) }
+    var isDecoyPinVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -1092,7 +1298,7 @@ fun ReadyStepView(viewModel: MainViewModel) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "پیکربندی با موفقیت انجام شد. خلاصه تنظیمات شما به شرح زیر است:",
+            text = "پیکربندی با موفقیت انجام شد. خلاصه تنظیمات امنیتی شما به شرح زیر است:",
             color = Color.LightGray,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
@@ -1107,7 +1313,23 @@ fun ReadyStepView(viewModel: MainViewModel) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 SummaryConfigRow("تلفن اضطراری گیرنده هشدار:", JalaliCalendarHelper.toPersianNumber(emergencyNumber))
-                SummaryConfigRow("کد پیامکی کنترل از راه دور:", JalaliCalendarHelper.toPersianNumber(secretCode))
+
+                // MASKED SECRET CODE WITH TOGGLE (CRITICAL SECURITY FIX)
+                SummarySecretRow(
+                    label = "کد پیامکی کنترل از راه دور:",
+                    value = secretCode,
+                    isVisible = isSecretCodeVisible,
+                    onToggle = { isSecretCodeVisible = !isSecretCodeVisible }
+                )
+
+                // MASKED DECOY PIN WITH TOGGLE
+                SummarySecretRow(
+                    label = "PIN جعلی (فریب‌دهنده):",
+                    value = if (decoyPin.isNotEmpty()) decoyPin else "تنظیم‌نشده",
+                    isVisible = isDecoyPinVisible,
+                    onToggle = { isDecoyPinVisible = !isDecoyPinVisible }
+                )
+
                 SummaryConfigRow("سیستم ضد حذف (Device Admin):", "فعال و مجهز")
                 SummaryConfigRow("اعلام تعویض سیم کارت:", "روشن")
             }
@@ -1125,6 +1347,44 @@ fun ReadyStepView(viewModel: MainViewModel) {
                 .testTag("complete_and_activate_button")
         ) {
             Text("فعالسازی و ورود به صفحه اصلی گاردین", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+fun SummarySecretRow(
+    label: String,
+    value: String,
+    isVisible: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color.Gray, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (isVisible) JalaliCalendarHelper.toPersianNumber(value) else "••••",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = if (isVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (isVisible) "مخفی کردن" else "نمایش رمز",
+                    tint = GuardianAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }
@@ -1159,7 +1419,8 @@ fun SummaryConfigRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = label, color = Color.Gray, fontSize = 13.sp)
         Text(text = value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)

@@ -97,8 +97,19 @@ class GuardianPrefs(context: Context) {
         get() = prefs.getInt("sms_sent_count", 0)
         set(value) = prefs.edit().putInt("sms_sent_count", value).apply()
 
+    var firstInstallTime: Long
+        get() = prefs.getLong("first_install_time", 0L)
+        set(value) = prefs.edit().putLong("first_install_time", value).apply()
+
     var daysProtected: Int
-        get() = prefs.getInt("days_protected", 1)
+        get() {
+            val installTime = firstInstallTime
+            if (installTime == 0L) {
+                return prefs.getInt("days_protected", 1).coerceAtLeast(1)
+            }
+            val elapsedDays = ((System.currentTimeMillis() - installTime) / (1000L * 60 * 60 * 24)).toInt() + 1
+            return elapsedDays.coerceAtLeast(1)
+        }
         set(value) = prefs.edit().putInt("days_protected", value).apply()
 
     var lastLocationTime: Long

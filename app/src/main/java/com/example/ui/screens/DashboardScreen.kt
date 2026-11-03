@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -44,6 +45,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import android.content.ClipboardManager
+import android.content.ClipData
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -67,6 +71,7 @@ import com.example.ui.viewmodel.MainViewModel
 fun DashboardScreen(viewModel: MainViewModel) {
     val activeTab by viewModel.activeTab.collectAsState()
     val context = LocalContext.current
+    var showSecurityStatusDialog by remember { mutableStateOf(false) }
 
     // Force layout direction to RTL for native Persian support
     CompositionLocalProvider(value = LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -85,7 +90,12 @@ fun DashboardScreen(viewModel: MainViewModel) {
                                     .background(Color(0xFF1A237E)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("🛡️", fontSize = 16.sp)
+                                Icon(
+                                    imageVector = Icons.Filled.Security,
+                                    contentDescription = "گاردین",
+                                    tint = Color(0xFFFFB300),
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -101,14 +111,19 @@ fun DashboardScreen(viewModel: MainViewModel) {
                     ),
                     actions = {
                         IconButton(
-                            onClick = { /* notification action placeholder */ },
+                            onClick = { showSecurityStatusDialog = true },
                             modifier = Modifier
                                 .padding(end = 8.dp)
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.05f))
+                                .background(Color.White.copy(alpha = 0.08f))
                         ) {
-                            Text("🔔", fontSize = 16.sp)
+                            Icon(
+                                imageVector = Icons.Filled.Notifications,
+                                contentDescription = "وضعیت امنیتی سیستم",
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     },
                     modifier = Modifier.testTag("app_bar_title")
@@ -195,6 +210,10 @@ fun DashboardScreen(viewModel: MainViewModel) {
                     "guide" -> GuideTabScreen(viewModel)
                 }
             }
+
+            if (showSecurityStatusDialog) {
+                SecurityStatusDialog(viewModel = viewModel, onDismiss = { showSecurityStatusDialog = false })
+            }
         }
     }
 }
@@ -208,8 +227,9 @@ fun HomeTabScreen(viewModel: MainViewModel) {
     val currentMode by viewModel.currentMode.collectAsState()
     val lastEvent by viewModel.lastEventMessage.collectAsState()
     val smsCount by viewModel.smsSentCount.collectAsState()
+    val daysProtected by viewModel.daysProtected.collectAsState()
     val lastLocTime by viewModel.lastLocationTimeStr.collectAsState()
-    
+
     val recentLogs by viewModel.eventLogs.collectAsState()
     val listToShow = recentLogs.take(5)
 
@@ -252,42 +272,44 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                             .fillMaxSize()
                             .border(
                                 width = 4.dp,
-                                color = Color(0xFFFFB300).copy(alpha = 0.2f),
+                                color = if (isArmed) Color(0xFFFFB300).copy(alpha = 0.3f) else Color.White.copy(alpha = 0.1f),
                                 shape = CircleShape
                             )
                     )
-                    // Inner dashed simulated ring
+                    // Inner ring
                     Box(
                         modifier = Modifier
                             .padding(6.dp)
                             .fillMaxSize()
                             .border(
                                 width = 2.dp,
-                                color = Color(0xFFFFB300).copy(alpha = 0.6f),
+                                color = if (isArmed) Color(0xFFFFB300) else Color.Gray.copy(alpha = 0.3f),
                                 shape = CircleShape
                             )
                     )
-                    // Center white circle
+                    // Center circle
                     Box(
                         modifier = Modifier
                             .size(72.dp)
                             .clip(CircleShape)
-                            .background(Color.White),
+                            .background(if (isArmed) Color(0xFFFFB300) else Color(0xFF262626)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = if (isArmed) "🔒" else "🔓",
-                            fontSize = 30.sp
+                        Icon(
+                            imageVector = if (isArmed) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                            contentDescription = null,
+                            tint = if (isArmed) Color(0xFF1A237E) else Color.LightGray,
+                            modifier = Modifier.size(36.dp)
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
-                
+
                 Text(
-                    text = if (isArmed) "سیستم فعال است" else "سیستم غیرفعال است",
+                    text = if (isArmed) "سیستم مسلح و تحت نظارت است 🛡️" else "سیستم محافظت غیرفعال است ⚠️",
                     color = Color.White,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.testTag("armed_status_text")
@@ -296,20 +318,20 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = if (isArmed) "تمام سنسورها در حال مانیتورینگ هستند" else "آخرین فعالیت: $lastEvent",
+                    text = if (isArmed) "تمام سنسورهای حرکتی، سیم‌کارت و پیام‌گیر آنلاین هستند" else "آخرین فعالیت: $lastEvent",
                     color = if (isArmed) Color(0xFF90CAF9) else Color.Gray,
-                    fontSize = 13.sp,
+                    fontSize = 12.5.sp,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Armed state activator button
                 Button(
                     onClick = { viewModel.toggleGuardianArmed() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFB300),
-                        contentColor = Color(0xFF1A237E)
+                        containerColor = if (isArmed) Color(0xFFEF5350) else Color(0xFFFFB300),
+                        contentColor = if (isArmed) Color.White else Color(0xFF1A237E)
                     ),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
@@ -317,8 +339,14 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                         .height(52.dp)
                         .testTag("arm_toggle_button")
                 ) {
+                    Icon(
+                        imageVector = if (isArmed) Icons.Filled.LockOpen else Icons.Filled.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isArmed) "توقف محافظت" else "مسلح‌سازی و فعال‌سازی فوری",
+                        text = if (isArmed) "توقف موقت محافظت" else "مسلح‌سازی و فعال‌سازی فوری",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
@@ -326,52 +354,80 @@ fun HomeTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Device Guard mode sector
-        Text(
-            text = "حالت محافظت فعال دستگاه",
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        )
-
+        // Device Guard mode sector with icons and Persian subtitles
         Row(
             modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val modes = listOf(
-                "pocket" to "جیبی",
-                "cafe" to "کافه",
-                "charging" to "شارژر",
-                "bag" to "کیف"
+            Text(
+                text = "حالت محافظت سنسورهای دستگاه",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
             )
-            for ((key, title) in modes) {
-                val isSelected = currentMode == key
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 4.dp)
-                        .clickable { viewModel.updateCurrentMode(key) }
-                        .testTag("mode_$key"),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) Color(0xFFFFB300) else Color.White.copy(alpha = 0.05f)
-                    ),
-                    border = if (isSelected) null else BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text(
-                        text = title,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = if (isSelected) Color(0xFF1A237E) else Color(0xFF94A3B8)
+            Text(
+                text = "انتخاب بر اساس موقعیت شما",
+                color = Color.Gray,
+                fontSize = 11.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 2x2 Grid for Sensor Modes with rich visuals
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val modesList = listOf(
+                Triple("pocket", "جیبی", "سنسور مجاورت و شتاب"),
+                Triple("cafe", "کافه / میز", "ضد حرکت از روی سطح"),
+                Triple("charging", "شارژر", "آلارم قطع کابل برق"),
+                Triple("bag", "کیف دستی", "تشخیص نور و خروج از کیف")
+            )
+            val iconsList = mapOf(
+                "pocket" to Icons.Filled.PhoneAndroid,
+                "cafe" to Icons.Filled.Place,
+                "charging" to Icons.Filled.Power,
+                "bag" to Icons.Filled.Lock
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (i in 0..1) {
+                    val (key, title, subtitle) = modesList[i]
+                    val isSelected = currentMode == key
+                    SensorModeCard(
+                        modifier = Modifier.weight(1f),
+                        title = title,
+                        subtitle = subtitle,
+                        icon = iconsList[key] ?: Icons.Filled.Lock,
+                        isSelected = isSelected,
+                        onClick = { viewModel.updateCurrentMode(key) },
+                        tag = "mode_$key"
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (i in 2..3) {
+                    val (key, title, subtitle) = modesList[i]
+                    val isSelected = currentMode == key
+                    SensorModeCard(
+                        modifier = Modifier.weight(1f),
+                        title = title,
+                        subtitle = subtitle,
+                        icon = iconsList[key] ?: Icons.Filled.Lock,
+                        isSelected = isSelected,
+                        onClick = { viewModel.updateCurrentMode(key) },
+                        tag = "mode_$key"
                     )
                 }
             }
@@ -379,26 +435,62 @@ fun HomeTabScreen(viewModel: MainViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Quick Stats Row
+        // Quick Stats Row (smsSentCount, real dynamic daysProtected)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatInfoCard(
-                modifier = Modifier.weight(1.2f),
+                modifier = Modifier.weight(1f),
                 title = "پیامک‌های ارسالی",
                 value = JalaliCalendarHelper.toPersianNumber(smsCount.toString()),
                 sub = "کنترل و گزارش موقعیت",
                 tag = "sms_sent_stat_card"
             )
-            Spacer(modifier = Modifier.width(8.dp))
             StatInfoCard(
                 modifier = Modifier.weight(1f),
                 title = "امنیت تداوم",
-                value = JalaliCalendarHelper.toPersianNumber("۱"),
+                value = JalaliCalendarHelper.toPersianNumber(daysProtected.toString()),
                 sub = "روزه محافظت",
                 tag = "days_protected_card"
             )
+        }
+
+        // Location Info Pill (Real GPS timestamp)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocationOn,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "آخرین موقعیت ثبت‌شده GPS:",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = lastLocTime,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -503,6 +595,142 @@ fun StatInfoCard(
     }
 }
 
+@Composable
+fun SensorModeCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    tag: String
+) {
+    Card(
+        modifier = modifier
+            .testTag(tag)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Color(0xFFFFB300).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.04f)
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) Color(0xFFFFB300) else Color.White.copy(alpha = 0.08f)
+        ),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) Color(0xFFFFB300) else Color.White.copy(alpha = 0.06f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) Color(0xFF1A237E) else Color(0xFFFFB300),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (isSelected) Color(0xFFFFB300) else Color.White
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 10.5.sp,
+                    color = if (isSelected) Color.White.copy(alpha = 0.85f) else Color.Gray,
+                    lineHeight = 15.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SecurityStatusDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
+    val isArmed by viewModel.isArmed.collectAsState()
+    val lastLocTime by viewModel.lastLocationTimeStr.collectAsState()
+    val lastEvent by viewModel.lastEventMessage.collectAsState()
+    val emergencyNumber by viewModel.emergencyNumber.collectAsState()
+    val context = LocalContext.current
+    val isAdminActive = remember { viewModel.isDeviceAdminActive() }
+    val hasOverlay = remember {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.provider.Settings.canDrawOverlays(context)
+        } else true
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Security,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "مرکز پایش وضعیت امنیتی گاردین",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusDialogRow("وضعیت مسلح‌سازی:", if (isArmed) "مسلح و آنلاین 🛡️" else "غیرمسلح ⚠️", if (isArmed) Color(0xFF81C784) else Color(0xFFFFB300))
+                StatusDialogRow("مدیر دستگاه (ضدحذف):", if (isAdminActive) "فعال و تأییدشده" else "غیرفعال (ریسک حذف)", if (isAdminActive) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز ترسیم بر صفحه:", if (hasOverlay) "فعال" else "غیرفعال", if (hasOverlay) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("تلفن اضطراری ثبت‌شده:", JalaliCalendarHelper.toPersianNumber(emergencyNumber), Color.White)
+                StatusDialogRow("آخرین ردیابی GPS:", lastLocTime, Color.White)
+                StatusDialogRow("آخرین واقعه سیستم:", lastEvent, Color.LightGray)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300), contentColor = Color(0xFF1A237E))
+            ) {
+                Text("متوجه شدم", fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+fun StatusDialogRow(label: String, value: String, valueColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color.Gray, fontSize = 12.sp)
+        Text(text = value, color = valueColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 // ═══════════════════════════════════════
 // 2. SETTINGS TAB SCREEN (تنظیمات)
 // ═══════════════════════════════════════
@@ -510,6 +738,7 @@ fun StatInfoCard(
 fun SettingsTabScreen(viewModel: MainViewModel) {
     val emergencyNumber by viewModel.emergencyNumber.collectAsState()
     val secretCode by viewModel.secretSmsCode.collectAsState()
+    val decoyPin by viewModel.decoyPin.collectAsState()
     
     val simDetect by viewModel.simDetectEnabled.collectAsState()
     val usbAlert by viewModel.usbAlertEnabled.collectAsState()
@@ -530,6 +759,9 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
 
     var editingNumber by remember { mutableStateOf(emergencyNumber) }
     var editingCode by remember { mutableStateOf(secretCode) }
+    var editingDecoyPin by remember { mutableStateOf(decoyPin) }
+    var isCodeVisible by remember { mutableStateOf(false) }
+    var isDecoyVisible by remember { mutableStateOf(false) }
     var editingMessage by remember { mutableStateOf(lockScreenMsg) }
 
     val context = LocalContext.current
@@ -650,9 +882,9 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Section 1: EMERGENCY CREDENTIALS
+        // Section 1: EMERGENCY CREDENTIALS & CODES
         Text(
-            text = "اطلاعات اضطراری و حساب",
+            text = "۱. اطلاعات اضطراری و کدها",
             color = Color(0xFFFFB300),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -693,16 +925,27 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Secret command code input4 digits
+                // Secret command code input 4 digits (with eye toggle)
                 OutlinedTextField(
                     value = editingCode,
                     onValueChange = { 
-                        if (it.length <= 4) {
+                        if (it.length <= 4 && it.all { c -> c.isDigit() }) {
                             editingCode = it
                             viewModel.setSecretSmsCode(it)
                         }
                     },
                     label = { Text("کد رمز پیامکی کنترل (۴ رقم)", color = Color.Gray) },
+                    visualTransformation = if (isCodeVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isCodeVisible = !isCodeVisible }) {
+                            Icon(
+                                imageVector = if (isCodeVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (isCodeVisible) "مخفی‌سازی رمز" else "نمایش رمز",
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -718,9 +961,76 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Test SMS and apply buttons
+                // Decoy PIN (رمز فریبنده) input (with eye toggle)
+                OutlinedTextField(
+                    value = editingDecoyPin,
+                    onValueChange = { 
+                        if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                            editingDecoyPin = it
+                            viewModel.setDecoyPin(it)
+                        }
+                    },
+                    label = { Text("PIN جعلی و فریب‌دهنده سارق (۴ رقم)", color = Color.Gray) },
+                    visualTransformation = if (isDecoyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isDecoyVisible = !isDecoyVisible }) {
+                            Icon(
+                                imageVector = if (isDecoyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (isDecoyVisible) "مخفی‌سازی PIN" else "نمایش PIN",
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFFFB300),
+                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFFFB300),
+                        unfocusedLabelColor = Color.Gray
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("decoy_pin_input_settings"),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "نکته: در صورت اجبار توسط سارق برای بازگشایی گوشی، با این رمز دستگاه ظاهراً باز شده ولی مخفیانه هشدار خطر و GPS به خط اضطراری مخابره می‌شود.",
+                    color = Color.LightGray.copy(alpha = 0.65f),
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                // Save button with feedback
+                Button(
+                    onClick = {
+                        viewModel.setEmergencyNumber(editingNumber)
+                        viewModel.setSecretSmsCode(editingCode)
+                        viewModel.setDecoyPin(editingDecoyPin)
+                        android.widget.Toast.makeText(context, "تنظیمات اضطراری و رمزها با موفقیت ذخیره شدند ✅", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.08f), contentColor = Color.White),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                ) {
+                    Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF81C784), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("ذخیره و ثبت تنظیمات اضطراری", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Test SMS button
                 Button(
                     onClick = { viewModel.fireTestSms() },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300), contentColor = Color(0xFF1A237E)),
@@ -737,9 +1047,9 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Section 2: SMART TRIGGERS
+        // Section 2: SMART SENSORS & DETECTION
         Text(
-            text = "سنسورها و آلارم‌های هوشمند",
+            text = "۲. سنسورها و هشدارهای هوشمند",
             color = Color(0xFFFFB300),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -786,13 +1096,31 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
                     onCheckedChange = { viewModel.setChargerAlertEnabled(it) },
                     tag = "charger_check_toggle"
                 )
+            }
+        }
 
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
+        // Section 3: CONNECTED DEVICES & HEARTBEAT
+        Text(
+            text = "۳. دستگاه‌های متصل و ضربان حیات",
+            color = Color(0xFFFFB300),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
 
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 // Toggle Bluetooth paired device protector
                 SettingToggleRow(
                     title = "نگهبان هوشمند بلوتوث (Bluetooth Guardian)",
-                    desc = "اتصال به ساعت یا ایربادز. دوری و قطع اتصال آن زنگ خطر را فعال می‌کند",
+                    desc = "اتصال به ساعت یا ایربادز؛ دوری و قطع اتصال آن زنگ خطر را فعال می‌کند",
                     checked = btGuardian,
                     onCheckedChange = { viewModel.setBtGuardianEnabled(it) },
                     tag = "bt_guard_check_toggle"
@@ -844,43 +1172,10 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
                         }
                     }
                 }
-
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
-
-                // Toggle App Locker
-                SettingToggleRow(
-                    title = "سیستم قفل سنگین برنامه‌ها (App Locker)",
-                    desc = "درخواست گذرواژه برای ورود مجدد به کلیه برنامه‌های جانبی",
-                    checked = isAppLockerEnabled,
-                    onCheckedChange = { viewModel.setAppLockerEnabled(it) },
-                    tag = "app_locker_check_toggle"
-                )
-
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
-
-                // Toggle Device Lock
-                SettingToggleRow(
-                    title = "قفل فیزیکی سخت‌افزاری دستگاه (Device Lock)",
-                    desc = "اجازه اعمال قفل و تغییر PIN اصلی صفحه از طریق پیامک",
-                    checked = isDeviceLockEnabled,
-                    onCheckedChange = { viewModel.setDeviceLockEnabled(it) },
-                    tag = "device_lock_check_toggle"
-                )
-
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
-
-                // Toggle Intruder Selfie
-                SettingToggleRow(
-                    title = "تصویربردار مخفی محیط آفلاین (Intruder Selfie)",
-                    desc = "ثبت تصویر سارق صورت در گالری حین ثبت پین یا رمز نامعتبر",
-                    checked = isIntruderSelfieEnabled,
-                    onCheckedChange = { viewModel.setIntruderSelfieEnabled(it) },
-                    tag = "intruder_selfie_toggle"
-                )
             }
         }
 
-        // Section 3: SPECIAL RECORDER SLOTS
+        // Section 4: SPECIAL RECORDER SLOTS
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -889,13 +1184,15 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "🎙️",
-                    fontSize = 16.sp
+                Icon(
+                    imageVector = Icons.Filled.Call,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "اسلات‌های ضبط هشدار صوتی ضد سکوت",
+                    text = "۴. اسلات‌های ضبط هشدار صوتی ضد سکوت",
                     color = Color(0xFFFFB300),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -954,9 +1251,9 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Section 4: MESSAGES SCREEN PREVIEW
+        // Section 5: SECURITY & APP LOCKS
         Text(
-            text = "متن پیام قفل‌کننده صفحه نمایش",
+            text = "۵. قفل‌ها و محافظت از برنامه‌ها",
             color = Color(0xFFFFB300),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -972,6 +1269,47 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             shape = RoundedCornerShape(24.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                // Toggle App Locker
+                SettingToggleRow(
+                    title = "سیستم قفل سنگین برنامه‌ها (App Locker)",
+                    desc = "درخواست گذرواژه برای ورود مجدد به کلیه برنامه‌های جانبی",
+                    checked = isAppLockerEnabled,
+                    onCheckedChange = { viewModel.setAppLockerEnabled(it) },
+                    tag = "app_locker_check_toggle"
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
+
+                // Toggle Device Lock
+                SettingToggleRow(
+                    title = "قفل فیزیکی سخت‌افزاری دستگاه (Device Lock)",
+                    desc = "اجازه اعمال قفل و تغییر PIN اصلی صفحه از طریق پیامک",
+                    checked = isDeviceLockEnabled,
+                    onCheckedChange = { viewModel.setDeviceLockEnabled(it) },
+                    tag = "device_lock_check_toggle"
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
+
+                // Toggle Intruder Selfie
+                SettingToggleRow(
+                    title = "تصویربردار مخفی چهره سارق (Intruder Selfie)",
+                    desc = "عکاسی خودکار با دوربین جلو هنگام وارد کردن پین یا رمز اشتباه",
+                    checked = isIntruderSelfieEnabled,
+                    onCheckedChange = { viewModel.setIntruderSelfieEnabled(it) },
+                    tag = "intruder_selfie_toggle"
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(vertical = 12.dp))
+
+                Text(
+                    text = "متن پیام قفل‌کننده صفحه نمایش:",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+
                 OutlinedTextField(
                     value = editingMessage,
                     onValueChange = { 
@@ -1020,9 +1358,9 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Section 5: DEVICE ADMIN & APP UNINSTALL
+        // Section 6: DEVICE ADMIN & APP UNINSTALL
         Text(
-            text = "مدیریت دستگاه و لغو دسترسی (جهت حذف برنامه)",
+            text = "۶. مدیریت دستگاه و دسترسی‌ها (ضدحذف)",
             color = Color(0xFFFFB300),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
@@ -1307,19 +1645,22 @@ fun LogsTabScreen(viewModel: MainViewModel) {
         if (activeSubTab == "photos") {
             IntruderPhotosGalleryView(context = context)
         } else {
-            // Horizontal filter chips in Clean Minimalism style
+            // Horizontal scrollable filter chips
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val chips = listOf(
-                    "ALL" to "همه",
+                    "ALL" to "همه وقایع",
                     "ALARM" to "آژیرها",
-                    "LOC" to "ردیابی",
-                    "SIM_CHANGE" to "سیم‌کارت",
-                    "POWER" to "برق/شارژ"
+                    "LOC" to "ردیابی موقعیت",
+                    "SIM_CHANGE" to "تغییر سیم‌کارت",
+                    "POWER" to "برق و شارژر",
+                    "USB" to "کابل USB",
+                    "BT_GUARDIAN" to "بلوتوث"
                 )
 
                 for ((filter, title) in chips) {
@@ -1332,10 +1673,10 @@ fun LogsTabScreen(viewModel: MainViewModel) {
                         ),
                         border = if (isSelected) null else BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(36.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp)
+                        modifier = Modifier.height(38.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
-                        Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(title, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1352,8 +1693,40 @@ fun LogsTabScreen(viewModel: MainViewModel) {
                 shape = RoundedCornerShape(24.dp)
             ) {
                 if (logs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "هیچ گزارش امنیتی یافت نشد.", color = Color.Gray, fontSize = 13.sp)
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.05f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.List,
+                                    contentDescription = null,
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "هیچ گزارش امنیتی ثبت نشده است",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "سیستم در وضعیت کاملاً امن و پاک قرار دارد ✅",
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 } else {
                     LazyColumn(
@@ -1757,6 +2130,7 @@ fun LogTimelineItem(log: LogEntry) {
 // ═══════════════════════════════════════
 @Composable
 fun GuideTabScreen(viewModel: MainViewModel) {
+    val secretCode by viewModel.secretSmsCode.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1929,61 +2303,61 @@ fun GuideTabScreen(viewModel: MainViewModel) {
                 SmsCommandGuideRow(
                     title = "یافتن مکان و ردیابی لحظه‌ای",
                     cmd = "#LOC[کد]#",
-                    example = "#LOC1234#"
+                    example = "#LOC${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "قفل فوری گوشی و نمایش صفحه مسدودی",
                     cmd = "#LOCK[کد]#",
-                    example = "#LOCK1234#"
+                    example = "#LOCK${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "به صدا درآوردن آژیر ممتد امنیتی",
                     cmd = "#ALARM[کد]#",
-                    example = "#ALARM1234#"
+                    example = "#ALARM${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "ارسال پیام متنی دلخواه برای نمایش به سارق",
                     cmd = "#MSG[کد][متن]#",
-                    example = "#MSG1234گوشی من دزدیده شده است#"
+                    example = "#MSG${secretCode}گوشی مسروقه است#"
                 )
 
                 SmsCommandGuideRow(
                     title = "دریافت وضعیت کامل (باتری، سیم‌کارت، شارژر)",
                     cmd = "#STATUS[کد]#",
-                    example = "#STATUS1234#"
+                    example = "#STATUS${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "فعال‌سازی آلارم زمان‌شمار معکوس پلیس",
                     cmd = "#TIMER[کد]#",
-                    example = "#TIMER1234#"
+                    example = "#TIMER${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "پخش صدای ضبط شده اضطراری شما",
                     cmd = "#SOUND[اسلات]_[کد]#",
-                    example = "#SOUND1_1234#"
+                    example = "#SOUND1_${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "بازگشای قفل گاردین از راه دور",
                     cmd = "#UNLOCK[کد]#",
-                    example = "#UNLOCK1234#"
+                    example = "#UNLOCK${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "فرمان بازنشانی کارخانه و پاکسازی کامل دستگاه (Factory Reset)",
                     cmd = "#WIPE[کد]#",
-                    example = "#WIPE1234#"
+                    example = "#WIPE${secretCode}#"
                 )
 
                 SmsCommandGuideRow(
                     title = "عکاسی مخفیانه از سارق با دوربین جلو و ثبت در حافظه امن",
                     cmd = "#PHOTO[کد]#",
-                    example = "#PHOTO1234#"
+                    example = "#PHOTO${secretCode}#"
                 )
             }
         }
@@ -2320,24 +2694,48 @@ fun SmsCommandGuideRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val context = LocalContext.current
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            
             Text(
                 text = "مثال واقعی ارسال:",
                 color = Color.LightGray.copy(alpha = 0.7f),
                 fontSize = 11.sp,
                 textAlign = TextAlign.Right
             )
-            Text(
-                text = example,
-                color = Color(0xFF81C784),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                style = androidx.compose.ui.text.TextStyle(
-                    textDirection = androidx.compose.ui.text.style.TextDirection.Ltr
-                ),
-                modifier = Modifier
-                    .background(Color(0x1F81C784), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = example,
+                    color = Color(0xFF81C784),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    style = androidx.compose.ui.text.TextStyle(
+                        textDirection = androidx.compose.ui.text.style.TextDirection.Ltr
+                    ),
+                    modifier = Modifier
+                        .background(Color(0x1F81C784), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                IconButton(
+                    onClick = {
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(example))
+                        android.widget.Toast.makeText(context, "کد دستوری کپی شد", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .testTag("copy_sms_cmd_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "کپی دستور پیامک",
+                        tint = Color(0xFF81C784),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 }
