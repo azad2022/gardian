@@ -198,8 +198,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.insertLog(LogEntry(
                 eventType = "ALARM",
-                description = "برنامه گاردین راه‌اندازی و با موفقیت فعال شد 🛡️",
-                details = "شماره اضطراری: ${prefs.emergencyNumber}"
+                description = "کاربر از مرحله راه‌اندازی وارد برنامه شد",
+                details = "وضعیت مجوزها و قابلیت‌های امنیتی باید جداگانه در داشبورد بررسی شود."
             ))
         }
 
@@ -223,7 +223,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertLog(LogEntry(
                 eventType = "ALARM",
                 description = if (newState) "سامانه ضد سرقت گاردین مسلح شد 🛡️" else "سامانه غیرفعال شد ⚠️",
-                details = if (newState) "کلیه سیستم‌های نظارتی آنلاین شدند" else "سیستم‌های موقعیت مکانی و پیام‌گیر خاموش شدند"
+                details = if (newState) {
+                    "مسلح‌سازی فعال شد؛ وضعیت مجوزها و قابلیت‌های پیکربندی‌شده را جداگانه بررسی کنید."
+                } else {
+                    "مسلح‌سازی غیرفعال شد."
+                }
             ))
             _lastEventMessage.value = if (newState) "گاردین فعال است" else "غیرفعال"
         }
