@@ -357,7 +357,7 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = if (isArmed) "مسلح‌سازی فعال است؛ وضعیت تنظیمات، مجوزها و سلامت سنسورها جداگانه بررسی می‌شود." else "قابلیت‌های محافظتی در حالت مسلح‌سازی نیستند.",
+                    text = if (isArmed) "مسلح‌سازی فعال است؛ از این وضعیت، سلامت زنده سنسورها قابل استنتاج نیست." else "قابلیت‌های محافظتی در حالت مسلح‌سازی نیستند.",
                     color = if (isArmed) Color(0xFF90CAF9) else Color.Gray,
                     fontSize = 12.5.sp,
                     textAlign = TextAlign.Center
