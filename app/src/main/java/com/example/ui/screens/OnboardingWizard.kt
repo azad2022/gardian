@@ -1273,35 +1273,97 @@ fun ReadyStepView(viewModel: MainViewModel) {
     val emergencyNumber by viewModel.emergencyNumber.collectAsState()
     val secretCode by viewModel.secretSmsCode.collectAsState()
     val decoyPin by viewModel.decoyPin.collectAsState()
+    val simDetectEnabled by viewModel.simDetectEnabled.collectAsState()
+
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val requiredRuntimePermissions = remember {
+        listOf(
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.RECORD_AUDIO
+        )
+    }
+
+    var isDeviceAdminActive by remember { mutableStateOf(viewModel.isDeviceAdminActive()) }
+    var permissionStates by remember {
+        mutableStateOf(requiredRuntimePermissions.associateWith { permission -> isGranted(context, permission) })
+    }
+    var hasOverlayPermission by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
+        )
+    }
+
+    val refreshSetupState = remember(context, viewModel, requiredRuntimePermissions) {
+        {
+            isDeviceAdminActive = viewModel.isDeviceAdminActive()
+            permissionStates = requiredRuntimePermissions.associateWith { permission ->
+                isGranted(context, permission)
+            }
+            hasOverlayPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                Settings.canDrawOverlays(context)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, refreshSetupState) {
+        refreshSetupState()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshSetupState()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val hasSmsPermissions = permissionStates[Manifest.permission.SEND_SMS] == true &&
+        permissionStates[Manifest.permission.RECEIVE_SMS] == true &&
+        permissionStates[Manifest.permission.READ_SMS] == true
+    val hasLocationPermission = permissionStates[Manifest.permission.ACCESS_FINE_LOCATION] == true
+    val hasAudioPermission = permissionStates[Manifest.permission.RECORD_AUDIO] == true
+    val hasEmergencyNumber = emergencyNumber.trim().length >= 8
+    val hasSecretCode = secretCode.length == 4
+    val hasAllRuntimePermissions = requiredRuntimePermissions.all { permissionStates[it] == true }
+    val isSetupComplete = isDeviceAdminActive && hasAllRuntimePermissions &&
+        hasOverlayPermission && hasEmergencyNumber && hasSecretCode
 
     var isSecretCodeVisible by remember { mutableStateOf(false) }
     var isDecoyPinVisible by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
         Icon(
-            imageVector = Icons.Filled.CheckCircle,
+            imageVector = if (isSetupComplete) Icons.Filled.CheckCircle else Icons.Filled.Warning,
             contentDescription = null,
-            tint = Color(0xFF4CAF50),
-            modifier = Modifier.size(80.dp)
+            tint = if (isSetupComplete) Color(0xFF4CAF50) else Color(0xFFFFB300),
+            modifier = Modifier.size(72.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "آماده محافظت از گوشی شما هستیم!",
+            text = if (isSetupComplete) "پیکربندی پایه تکمیل شده است" else "پیکربندی هنوز کامل نیست",
             color = Color.White,
-            fontSize = 22.sp,
+            fontSize = 21.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "پیکربندی با موفقیت انجام شد. خلاصه تنظیمات امنیتی شما به شرح زیر است:",
+            text = if (isSetupComplete) {
+                "مجوزها و تنظیمات ضروری از وضعیت واقعی دستگاه بررسی شدند."
+            } else {
+                "برخی مجوزها یا اطلاعات ضروری هنوز تأیید نشده‌اند. تا زمان تکمیل آن‌ها، قابلیت‌های وابسته ممکن است در دسترس نباشند."
+            },
             color = Color.LightGray,
             fontSize = 14.sp,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            lineHeight = 21.sp
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -1311,18 +1373,38 @@ fun ReadyStepView(viewModel: MainViewModel) {
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                SummaryConfigRow("تلفن اضطراری گیرنده هشدار:", JalaliCalendarHelper.toPersianNumber(emergencyNumber))
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "خلاصه پیکربندی و دسترسی‌ها",
+                    color = GuardianAccent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                SummaryStatusRow(
+                    "شماره اضطراری",
+                    if (hasEmergencyNumber) "ثبت شده" else "ثبت نشده یا نامعتبر",
+                    hasEmergencyNumber
+                )
+                if (hasEmergencyNumber) {
+                    SummaryConfigRow("شماره ثبت‌شده:", JalaliCalendarHelper.toPersianNumber(emergencyNumber))
+                }
 
-                // MASKED SECRET CODE WITH TOGGLE (CRITICAL SECURITY FIX)
+                // Keep credentials masked by default and preserve the temporary visibility toggles.
                 SummarySecretRow(
                     label = "کد پیامکی کنترل از راه دور:",
                     value = secretCode,
                     isVisible = isSecretCodeVisible,
                     onToggle = { isSecretCodeVisible = !isSecretCodeVisible }
                 )
+                SummaryStatusRow(
+                    "اعتبار کد پیامکی",
+                    if (hasSecretCode) "چهار رقم ثبت شده" else "نیازمند تکمیل",
+                    hasSecretCode
+                )
 
-                // MASKED DECOY PIN WITH TOGGLE
                 SummarySecretRow(
                     label = "PIN جعلی (فریب‌دهنده):",
                     value = if (decoyPin.isNotEmpty()) decoyPin else "تنظیم‌نشده",
@@ -1330,23 +1412,73 @@ fun ReadyStepView(viewModel: MainViewModel) {
                     onToggle = { isDecoyPinVisible = !isDecoyPinVisible }
                 )
 
-                SummaryConfigRow("سیستم ضد حذف (Device Admin):", "فعال و مجهز")
-                SummaryConfigRow("اعلام تعویض سیم کارت:", "روشن")
+                SummaryStatusRow(
+                    "مدیر دستگاه (Device Admin)",
+                    if (isDeviceAdminActive) "فعال و تأییدشده" else "فعال نیست",
+                    isDeviceAdminActive
+                )
+                SummaryConfigRow(
+                    "تشخیص تعویض سیم‌کارت:",
+                    if (simDetectEnabled) "روشن در تنظیمات" else "خاموش در تنظیمات"
+                )
+                SummaryStatusRow(
+                    "مجوزهای پیامک (SMS)",
+                    if (hasSmsPermissions) "مجاز" else "نیازمند مجوز",
+                    hasSmsPermissions
+                )
+                SummaryStatusRow(
+                    "مجوز مکان‌یابی دقیق (GPS)",
+                    if (hasLocationPermission) "مجاز" else "نیازمند مجوز",
+                    hasLocationPermission
+                )
+                SummaryStatusRow(
+                    "مجوز ضبط صدا",
+                    if (hasAudioPermission) "مجاز" else "نیازمند مجوز",
+                    hasAudioPermission
+                )
+                SummaryStatusRow(
+                    "مجوز نمایش روی برنامه‌ها (Overlay)",
+                    if (hasOverlayPermission) "مجاز" else "نیازمند مجوز",
+                    hasOverlayPermission
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+        if (!isSetupComplete) {
+            Text(
+                text = "ورود به برنامه با وجود موارد ناقص امکان‌پذیر است؛ مسلح‌سازی به معنی اعطای خودکار مجوزهای مفقود نیست.",
+                color = Color(0xFFFFB300),
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = { viewModel.completeOnboardingAndActivate() },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isSetupComplete) Color(0xFF4CAF50) else Color(0xFFFFB300),
+                contentColor = if (isSetupComplete) Color.White else Color(0xFF1A237E)
+            ),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
                 .testTag("complete_and_activate_button")
         ) {
-            Text("فعالسازی و ورود به صفحه اصلی گاردین", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(
+                text = if (isSetupComplete) {
+                    "فعال‌سازی و ورود به صفحه اصلی گاردین"
+                } else {
+                    "ورود به برنامه با پیکربندی ناقص"
+                },
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
         }
     }
 }
@@ -1424,6 +1556,41 @@ fun SummaryConfigRow(label: String, value: String) {
     ) {
         Text(text = label, color = Color.Gray, fontSize = 13.sp)
         Text(text = value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun SummaryStatusRow(label: String, value: String, isVerified: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = if (isVerified) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                contentDescription = value,
+                tint = if (isVerified) Color(0xFF81C784) else Color(0xFFFFB300),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = value,
+                color = if (isVerified) Color(0xFF81C784) else Color(0xFFFFB300),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
