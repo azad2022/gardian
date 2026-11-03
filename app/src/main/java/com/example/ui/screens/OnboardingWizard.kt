@@ -1508,7 +1508,7 @@ fun SummarySecretRow(
             Spacer(modifier = Modifier.width(6.dp))
             IconButton(
                 onClick = onToggle,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = if (isVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
