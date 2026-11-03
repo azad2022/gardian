@@ -1497,7 +1497,12 @@ fun SummarySecretRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color.Gray, fontSize = 13.sp)
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f)
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = if (isVisible) JalaliCalendarHelper.toPersianNumber(value) else "••••",
@@ -1554,8 +1559,20 @@ fun SummaryConfigRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color.Gray, fontSize = 13.sp)
-        Text(text = value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
