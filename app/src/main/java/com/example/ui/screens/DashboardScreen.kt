@@ -42,6 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -225,10 +228,46 @@ fun DashboardScreen(viewModel: MainViewModel) {
 fun HomeTabScreen(viewModel: MainViewModel) {
     val isArmed by viewModel.isArmed.collectAsState()
     val currentMode by viewModel.currentMode.collectAsState()
-    val lastEvent by viewModel.lastEventMessage.collectAsState()
+    val simDetect by viewModel.simDetectEnabled.collectAsState()
+    val usbAlert by viewModel.usbAlertEnabled.collectAsState()
+    val chargerAlert by viewModel.chargerAlertEnabled.collectAsState()
+    val btGuardian by viewModel.btGuardianEnabled.collectAsState()
     val smsCount by viewModel.smsSentCount.collectAsState()
     val daysProtected by viewModel.daysProtected.collectAsState()
     val lastLocTime by viewModel.lastLocationTimeStr.collectAsState()
+
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasSmsPermissions by remember { mutableStateOf(false) }
+    var hasLocationPermission by remember { mutableStateOf(false) }
+    var hasAudioPermission by remember { mutableStateOf(false) }
+    var hasOverlayPermission by remember { mutableStateOf(false) }
+    var isAdminActive by remember { mutableStateOf(false) }
+
+    val refreshSystemStatus = remember(context, viewModel) {
+        {
+            fun granted(permission: String): Boolean =
+                ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+            hasSmsPermissions = granted(Manifest.permission.SEND_SMS) &&
+                granted(Manifest.permission.RECEIVE_SMS) &&
+                granted(Manifest.permission.READ_SMS)
+            hasLocationPermission = granted(Manifest.permission.ACCESS_FINE_LOCATION)
+            hasAudioPermission = granted(Manifest.permission.RECORD_AUDIO)
+            hasOverlayPermission = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(context)
+            isAdminActive = viewModel.isDeviceAdminActive()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, refreshSystemStatus) {
+        refreshSystemStatus()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshSystemStatus()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val recentLogs by viewModel.eventLogs.collectAsState()
     val listToShow = recentLogs.take(5)
@@ -307,7 +346,7 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = if (isArmed) "سیستم مسلح و تحت نظارت است 🛡️" else "سیستم محافظت غیرفعال است ⚠️",
+                    text = if (isArmed) "حالت مسلح‌سازی فعال است" else "حالت مسلح‌سازی غیرفعال است",
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
@@ -318,7 +357,7 @@ fun HomeTabScreen(viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = if (isArmed) "تمام سنسورهای حرکتی، سیم‌کارت و پیام‌گیر آنلاین هستند" else "آخرین فعالیت: $lastEvent",
+                    text = if (isArmed) "مسلح‌سازی فعال است؛ وضعیت تنظیمات، مجوزها و سلامت سنسورها جداگانه بررسی می‌شود." else "قابلیت‌های محافظتی در حالت مسلح‌سازی نیستند.",
                     color = if (isArmed) Color(0xFF90CAF9) else Color.Gray,
                     fontSize = 12.5.sp,
                     textAlign = TextAlign.Center
@@ -433,7 +472,44 @@ fun HomeTabScreen(viewModel: MainViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, bottom = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "وضعیت پیکربندی امنیتی",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "این بخش وضعیت تنظیمات و مجوزهای اندروید را نشان می‌دهد؛ سلامت زنده سخت‌افزار سنسورها از این اطلاعات قابل تأیید نیست.",
+                    color = Color.LightGray,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp
+                )
+                StatusDialogRow("تشخیص تعویض سیم‌کارت:", if (simDetect) "فعال در تنظیمات" else "غیرفعال در تنظیمات", if (simDetect) Color(0xFF81C784) else Color(0xFFFFB300))
+                StatusDialogRow("هشدار اتصال USB:", if (usbAlert) "فعال در تنظیمات" else "غیرفعال در تنظیمات", if (usbAlert) Color(0xFF81C784) else Color(0xFFFFB300))
+                StatusDialogRow("هشدار جدا شدن شارژر:", if (chargerAlert) "فعال در تنظیمات" else "غیرفعال در تنظیمات", if (chargerAlert) Color(0xFF81C784) else Color(0xFFFFB300))
+                StatusDialogRow("نگهبان بلوتوث:", if (btGuardian) "فعال در تنظیمات" else "غیرفعال در تنظیمات", if (btGuardian) Color(0xFF81C784) else Color(0xFFFFB300))
+                Divider(color = Color.White.copy(alpha = 0.08f))
+                StatusDialogRow("مجوزهای پیامک:", if (hasSmsPermissions) "مجاز" else "نیازمند مجوز", if (hasSmsPermissions) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز مکان‌یابی:", if (hasLocationPermission) "مجاز" else "نیازمند مجوز", if (hasLocationPermission) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز ضبط صدا:", if (hasAudioPermission) "مجاز" else "نیازمند مجوز", if (hasAudioPermission) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز نمایش روی برنامه‌ها:", if (hasOverlayPermission) "مجاز" else "نیازمند مجوز", if (hasOverlayPermission) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مدیر دستگاه:", if (isAdminActive) "تأییدشده" else "فعال نیست", if (isAdminActive) Color(0xFF81C784) else Color(0xFFEF5350))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Quick Stats Row (smsSentCount, real dynamic daysProtected)
         Row(
@@ -665,11 +741,42 @@ fun SecurityStatusDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
     val lastEvent by viewModel.lastEventMessage.collectAsState()
     val emergencyNumber by viewModel.emergencyNumber.collectAsState()
     val context = LocalContext.current
-    val isAdminActive = remember { viewModel.isDeviceAdminActive() }
-    val hasOverlay = remember {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            android.provider.Settings.canDrawOverlays(context)
-        } else true
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var isAdminActive by remember { mutableStateOf(viewModel.isDeviceAdminActive()) }
+    var hasOverlay by remember {
+        mutableStateOf(
+            android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(context)
+        )
+    }
+    var hasSmsPermissions by remember { mutableStateOf(false) }
+    var hasLocationPermission by remember { mutableStateOf(false) }
+    var hasAudioPermission by remember { mutableStateOf(false) }
+
+    val refreshSystemStatus = remember(context, viewModel) {
+        {
+            fun granted(permission: String): Boolean =
+                ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+            isAdminActive = viewModel.isDeviceAdminActive()
+            hasOverlay = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(context)
+            hasSmsPermissions = granted(Manifest.permission.SEND_SMS) &&
+                granted(Manifest.permission.RECEIVE_SMS) &&
+                granted(Manifest.permission.READ_SMS)
+            hasLocationPermission = granted(Manifest.permission.ACCESS_FINE_LOCATION)
+            hasAudioPermission = granted(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, refreshSystemStatus) {
+        refreshSystemStatus()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshSystemStatus()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     AlertDialog(
@@ -695,15 +802,20 @@ fun SecurityStatusDialog(viewModel: MainViewModel, onDismiss: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
-                StatusDialogRow("وضعیت مسلح‌سازی:", if (isArmed) "مسلح و آنلاین 🛡️" else "غیرمسلح ⚠️", if (isArmed) Color(0xFF81C784) else Color(0xFFFFB300))
-                StatusDialogRow("مدیر دستگاه (ضدحذف):", if (isAdminActive) "فعال و تأییدشده" else "غیرفعال (ریسک حذف)", if (isAdminActive) Color(0xFF81C784) else Color(0xFFEF5350))
-                StatusDialogRow("مجوز ترسیم بر صفحه:", if (hasOverlay) "فعال" else "غیرفعال", if (hasOverlay) Color(0xFF81C784) else Color(0xFFEF5350))
-                StatusDialogRow("تلفن اضطراری ثبت‌شده:", JalaliCalendarHelper.toPersianNumber(emergencyNumber), Color.White)
-                StatusDialogRow("آخرین ردیابی GPS:", lastLocTime, Color.White)
-                StatusDialogRow("آخرین واقعه سیستم:", lastEvent, Color.LightGray)
+                StatusDialogRow("وضعیت کلی محافظت:", if (isArmed) "مسلح‌سازی فعال است" else "مسلح‌سازی غیرفعال است", if (isArmed) Color(0xFF81C784) else Color(0xFFFFB300))
+                StatusDialogRow("مدیر دستگاه (ضدحذف):", if (isAdminActive) "فعال و تأییدشده" else "فعال نیست", if (isAdminActive) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز ترسیم روی برنامه‌ها:", if (hasOverlay) "مجاز" else "نیازمند مجوز", if (hasOverlay) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوزهای پیامک:", if (hasSmsPermissions) "مجاز" else "نیازمند مجوز", if (hasSmsPermissions) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز مکان‌یابی:", if (hasLocationPermission) "مجاز" else "نیازمند مجوز", if (hasLocationPermission) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("مجوز ضبط صدا:", if (hasAudioPermission) "مجاز" else "نیازمند مجوز", if (hasAudioPermission) Color(0xFF81C784) else Color(0xFFEF5350))
+                StatusDialogRow("تلفن اضطراری:", if (emergencyNumber.isBlank()) "ثبت نشده" else JalaliCalendarHelper.toPersianNumber(emergencyNumber), if (emergencyNumber.isBlank()) Color(0xFFEF5350) else Color.White)
+                StatusDialogRow("آخرین گزارش GPS:", lastLocTime, Color.White)
+                StatusDialogRow("آخرین رویداد امنیتی:", lastEvent.ifBlank { "رویدادی ثبت نشده است" }, Color.LightGray)
             }
         },
         confirmButton = {
@@ -726,8 +838,20 @@ fun StatusDialogRow(label: String, value: String, valueColor: Color) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color.Gray, fontSize = 12.sp)
-        Text(text = value, color = valueColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            color = valueColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -765,6 +889,7 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
     var editingMessage by remember { mutableStateOf(lockScreenMsg) }
 
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasOverlayPermission by remember {
         mutableStateOf(
@@ -805,12 +930,19 @@ fun SettingsTabScreen(viewModel: MainViewModel) {
         }
     }
 
-    // Automatically check overlay and admin status on launch
-    LaunchedEffect(Unit) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            hasOverlayPermission = android.provider.Settings.canDrawOverlays(context)
+    // Re-check system authorization whenever the user returns from Android settings.
+    DisposableEffect(lifecycleOwner, context, viewModel) {
+        fun refreshAuthorization() {
+            hasOverlayPermission = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(context)
+            isAdminActive = viewModel.isDeviceAdminActive()
         }
-        isAdminActive = viewModel.isDeviceAdminActive()
+        refreshAuthorization()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshAuthorization()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(
